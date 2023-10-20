@@ -28,7 +28,7 @@ We then have access to the depth information as a powerful information.
 The ROS library allow use to separate different tasks of our algorithm into independent nodes running in parrallel.
 It automatically start the nodes and send messages between them to share information. Different node are created for the object detection, robot operation and camera control.  
 
-![](./images/flow_chart.jpg) 
+![](./images/flow_chart.JPG) 
 ![](./images/rosgraph3.JPG) 
 
 
