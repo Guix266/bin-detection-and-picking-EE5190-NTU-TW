@@ -1,0 +1,25 @@
+
+# move it + robot
+roslaunch ur_modern_driver ur10_bringup.launch robot_ip:=192.168.72.234
+roslaunch ur10_moveit_config ur10_moveit_planning_execution.launch limited:=True
+
+# kinect node
+roslaunch freenect_launch freenect.launch
+
+# Move the griper
+rosrun robotiq_2f_gripper_control Robotiq2FGripperRtuNode.py /dev/ttyUSB1
+
+###rosrun robotiq_2f_gripper_control Robotiq2FGripperSimpleController.py
+
+
+
+# Move the robot node
+python main_move.py
+
+HCC:
+# Capture picture from kinect
+cd catkin_ws/src/project_ai/src
+python Project_get_kinect_picture.py
+
+# Main program
+python3 Project_running.py

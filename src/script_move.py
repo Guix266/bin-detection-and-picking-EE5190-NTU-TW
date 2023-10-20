@@ -1,0 +1,290 @@
+#!/usr/bin/env python
+
+import time
+import sys
+import copy
+import rospy
+import moveit_commander
+import moveit_msgs.msg
+import geometry_msgs.msg
+from math import pi
+from std_msgs.msg import String
+from moveit_commander.conversions import pose_to_list
+## END_SUB_TUTORIAL
+
+def all_close(goal, actual, tolerance):
+  """
+  Convenience method for testing if a list of values are within a tolerance of their counterparts in another list
+  @param: goal       A list of floats, a Pose or a PoseStamped
+  @param: actual     A list of floats, a Pose or a PoseStamped
+  @param: tolerance  A float
+  @returns: bool
+  """
+  all_equal = True
+  if type(goal) is list:
+    for index in range(len(goal)):
+      if abs(actual[index] - goal[index]) > tolerance:
+        return False
+
+  elif type(goal) is geometry_msgs.msg.PoseStamped:
+    return all_close(goal.pose, actual.pose, tolerance)
+
+  elif type(goal) is geometry_msgs.msg.Pose:
+    return all_close(pose_to_list(goal), pose_to_list(actual), tolerance)
+
+  return True
+
+class Initialise_robot(object):
+  	"""create the interface to move the robot"""
+  	def __init__(self):
+	    super(Initialise_robot, self).__init__()
+	    ## First initialize `moveit_commander`_ and a `rospy`_ node:
+	    moveit_commander.roscpp_initialize(sys.argv)
+	    rospy.init_node('script_move',
+	                    anonymous=True)
+
+	    ## Instantiate a `RobotCommander`_ object. This object is the outer-level interface to
+	    ## the robot:
+	    robot = moveit_commander.RobotCommander()
+
+	    ## Instantiate a `PlanningSceneInterface`_ object.  This object is an interface
+	    ## to the world surrounding the robot:
+	    scene = moveit_commander.PlanningSceneInterface()
+
+	    ## Instantiate a `MoveGroupCommander`_ object.  This object is an interface
+	    ## to one group of joints. 
+	    group_name = "manipulator"
+	    group = moveit_commander.MoveGroupCommander(group_name)
+	    #group.setPlannerId("SBLkConfigDefault")
+
+	    ## We create a `DisplayTrajectory`_ publisher which is used later to publish
+	    ## trajectories for RViz to visualize:
+	    display_trajectory_publisher = rospy.Publisher('/move_group/display_planned_path',
+	                                                   moveit_msgs.msg.DisplayTrajectory,
+	                                                   queue_size=20)
+
+	    print("\n##### INFO ABOUT THE ROBOT")
+	    planning_frame = group.get_planning_frame()
+	    print "====== Reference frame: %s" % planning_frame
+
+	    # We can also print the name of the end-effector link for this group:
+	    eef_link = group.get_end_effector_link()
+	    print "====== End effector: %s" % eef_link
+
+	    # We can get a list of all the groups in the robot:
+	    group_names = robot.get_group_names()
+	    print "====== Robot Groups:", robot.get_group_names()
+
+	    # Sometimes for debugging it is useful to print the entire state of the
+	    # robot:
+	    # print "\n============ Printing robot state"
+	    # print robot.get_current_state()
+
+	    # Misc variables
+	    self.box_name = ''
+	    self.robot = robot
+	    self.scene = scene
+	    self.group = group
+	    self.display_trajectory_publisher = display_trajectory_publisher
+	    self.planning_frame = planning_frame
+	    self.eef_link = eef_link
+	    self.group_names = group_names
+
+	def go_home(self):
+		"""Set the robot position to start picking the objects"""
+		joint_goal = self.group.get_current_joint_values()
+		print('joint ='+str(joint_goal))
+		joint_goal[0] = pi/2
+		joint_goal[1] = -pi/2
+		joint_goal[2] = 0
+		joint_goal[3] = 0
+		joint_goal[4] = 0
+		joint_goal[5] = 0
+
+		# The go command can be called with joint values, poses, or without any
+		# parameters if you have already set the pose or joint target for the group
+		self.group.go(joint_goal, wait=True)
+
+		# Calling ``stop()`` ensures that there is no residual movement
+		self.group.stop()
+
+  	def go_starting_point(self):
+		"""Set the robot position to start picking the objects"""
+		joint_goal = self.group.get_current_joint_values()
+		print('joint ='+str(joint_goal))
+		joint_goal[0] = pi/2
+		joint_goal[1] = -pi/2
+		joint_goal[2] = pi/2
+		joint_goal[3] = -pi/2
+		joint_goal[4] = -pi/2
+		joint_goal[5] = 0
+
+		# The go command can be called with joint values, poses, or without any
+		# parameters if you have already set the pose or joint target for the group
+		self.group.go(joint_goal, wait=True)
+
+		# Calling ``stop()`` ensures that there is no residual movement
+		self.group.stop()
+
+		print("STARTING POSITION COORDINATES :")
+		current_pose = self.group.get_current_pose().pose
+		print(current_pose)
+
+		current_joints = self.group.get_current_joint_values()
+		return all_close(joint_goal, current_joints, 0.01)
+
+
+	def pick_object(self, x, y, z=0.25, scale=1):
+		"""fonction used to pick the objects (first x,y then orientation, then z)"""
+		print(u"[INFO] ## Robot go and pick an object in (%2f,%2f,%2f)" % (x,y,z))
+		waypoints = []
+		wpose = self.group.get_current_pose().pose
+
+		# To control if the movement was good
+		pose_goal = self.group.get_current_pose().pose
+		pose_goal.position.x = scale * x
+		pose_goal.position.y = scale * y
+		pose_goal.orientation.x = scale * 0
+		pose_goal.orientation.y = scale * 0.7
+		pose_goal.orientation.z = scale * 0
+		pose_goal.orientation.w = scale * 0.7
+		pose_goal.position.z = scale * z
+
+		#move to the specified (x,y) point
+		wpose.position.x = scale * x
+		wpose.position.y = scale * y 
+		waypoints.append(copy.deepcopy(wpose))
+		# rotate the end_effector to put it verticaly
+		# wpose.orientation.x = scale * 0
+		# wpose.orientation.y = scale * 0.7
+		# wpose.orientation.z = scale * 0
+		# wpose.orientation.w = scale * 0.7
+		# waypoints.append(copy.deepcopy(wpose))
+		# move the end effector to the bottom
+		wpose.position.z = scale * z
+		waypoints.append(copy.deepcopy(wpose))
+
+		# Plan the trajectory
+		(plan, fraction) = self.group.compute_cartesian_path(
+		                                   waypoints,   # waypoints to follow
+		                                   0.01,        # eef_step	(resolution of 1cm on the plan)
+		                                   0.0)         # jump_threshold (disable)
+		# Execute the plana
+		self.group.execute(plan, wait=True)
+
+		print("\n# Final pose :")
+		current_pose = self.group.get_current_pose().pose
+		print(current_pose)
+
+		self.group.clear_pose_targets()
+		return all_close(pose_goal, current_pose, 0.01)
+
+	def lift_up_the_object(self, x, y, z=0.4, scale=1):
+		"""fonction used to pick the objects (first x,y then orientation, then z)"""
+		print(u"[INFO] ## Robot lift up the object and move it in (%2f,%2f,%2f)" % (x,y,z))
+		waypoints = []
+		wpose = self.group.get_current_pose().pose
+
+		# To control if the movement was good
+		pose_goal = self.group.get_current_pose().pose
+		pose_goal.position.x = scale * x
+		pose_goal.position.y = scale * y
+		pose_goal.orientation.x = scale * 0
+		pose_goal.orientation.y = scale * 0.7
+		pose_goal.orientation.z = scale * 0
+		pose_goal.orientation.w = scale * 0.7
+		pose_goal.position.z = scale * z
+
+		# move the end effector to the bottom
+		wpose.position.z = scale * z
+		waypoints.append(copy.deepcopy(wpose))
+
+		#move to the specified (x,y) point
+		wpose.position.x = scale * x
+		wpose.position.y = scale * y 
+		waypoints.append(copy.deepcopy(wpose))
+
+		# Plan the trajectory
+		(plan, fraction) = self.group.compute_cartesian_path(
+		                                   waypoints,   # waypoints to follow
+		                                   0.01,        # eef_step	(resolution of 1cm on the plan)
+		                                   0.0)         # jump_threshold (disable)
+		# Execute the plana
+		self.group.execute(plan, wait=True)
+
+		print("\n# Final pose :")
+		current_pose = self.group.get_current_pose().pose
+		print(current_pose)
+
+		self.group.clear_pose_targets()
+		return all_close(pose_goal, current_pose, 0.01)
+
+
+
+
+def main():
+  try:
+    print "\n[INFO] INITIALISATION OF THE ROBOT (press ctrl-d to exit)"
+    ur10 = Initialise_robot()
+
+    print "\n##### (press key) Set the robot in starting position :"
+    raw_input()
+    result = ur10.go_starting_point()
+    print(u"The robot is ready = %r" % str(result))
+
+    print "\n##### (press key) Change the position of the end effector with a Cartesian path"
+
+    raw_input()
+    result = ur10.pick_object(0,0.9)
+    print(u"The robot reached the point = %r" % str(result))
+
+    result = ur10.lift_up_the_object(0.3,0.5)
+    print(u"The robot reached the point = %r" % str(result))
+ 
+    ur10.go_home()  
+
+    print "\n============ Exit the program"
+  except rospy.ROSInterruptException:
+    return
+  except KeyboardInterrupt:
+    return
+
+
+if __name__ == '__main__':
+	main()
+
+## BEGIN_TUTORIAL
+## .. _moveit_commander:
+##    http://docs.ros.org/kinetic/api/moveit_commander/html/namespacemoveit__commander.html
+##
+## .. _MoveGroupCommander:
+##    http://docs.ros.org/kinetic/api/moveit_commander/html/classmoveit__commander_1_1move__group_1_1MoveGroupCommander.html
+##
+## .. _RobotCommander:
+##    http://docs.ros.org/kinetic/api/moveit_commander/html/classmoveit__commander_1_1robot_1_1RobotCommander.html
+##
+## .. _PlanningSceneInterface:
+##    http://docs.ros.org/kinetic/api/moveit_commander/html/classmoveit__commander_1_1planning__scene__interface_1_1PlanningSceneInterface.html
+##
+## .. _DisplayTrajectory:
+##    http://docs.ros.org/kinetic/api/moveit_msgs/html/msg/DisplayTrajectory.html
+##
+## .. _RobotTrajectory:
+##    http://docs.ros.org/kinetic/api/moveit_msgs/html/msg/RobotTrajectory.html
+##
+## .. _rospy:
+##    http://docs.ros.org/kinetic/api/rospy/html/
+## CALL_SUB_TUTORIAL imports
+## CALL_SUB_TUTORIAL setup
+## CALL_SUB_TUTORIAL basic_info
+## CALL_SUB_TUTORIAL plan_to_joint_state
+## CALL_SUB_TUTORIAL plan_to_pose
+## CALL_SUB_TUTORIAL plan_cartesian_path
+## CALL_SUB_TUTORIAL display_trajectory
+## CALL_SUB_TUTORIAL execute_plan
+## CALL_SUB_TUTORIAL add_box
+## CALL_SUB_TUTORIAL wait_for_scene_update
+## CALL_SUB_TUTORIAL attach_object
+## CALL_SUB_TUTORIAL detach_object
+## CALL_SUB_TUTORIAL remove_object
+## END_TUTORIAL

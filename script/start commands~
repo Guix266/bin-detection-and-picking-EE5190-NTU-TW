@@ -1,0 +1,12 @@
+ roslaunch ur_modern_driver ur10_bringup.launch robot_ip:=192.168.72.234
+roslaunch ur10_moveit_config ur10_moveit_planning_execution.launch limited:=True
+rosrun project_ai scrip_move.py ^C
+
+sudo apt-get install ros-indigo-moveit-commander  
+
+
+gripper
+rosrun robotiq_c_model_control CModelRtuNode.py /dev/ttyUSB1
+rosrun robotiq_c_model_control CModelSimpleController.py
+
+roslaunch openni_launch openni.launch
