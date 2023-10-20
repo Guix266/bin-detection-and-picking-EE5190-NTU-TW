@@ -31,4 +31,5 @@ It automatically start the nodes and send messages between them to share informa
 ![](./images/flow_chart.JPG) 
 ![](./images/rosgraph3.JPG) 
 
-
+## Authors :
+GUILLAUME DESERMEAUX, HUANG CHUN-CHI, YI-TING PENG, WEN YEN-CHUN
